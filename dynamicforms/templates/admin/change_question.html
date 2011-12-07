@@ -1,0 +1,11 @@
+{% extends "admin/change_form.html" %}
+{% load adminmedia admin_list i18n %}
+{% block extrahead %}{{ block.super }}
+<script type="text/javascript">
+var $ = django['jQuery'];  
+$(document).ready(function($) {
+  $('div.content_type').hide();
+  $('div.object_id').hide();
+});
+</script>
+{% endblock %}

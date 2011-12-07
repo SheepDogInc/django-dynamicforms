@@ -1,0 +1,14 @@
+/* Admin overrides */
+
+.drag_handle {
+	width: 16px;
+	height: 16px;
+	background: url(../img/arrow-move.png);
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.drag_handle:hover {
+	cursor: move;
+}
+
