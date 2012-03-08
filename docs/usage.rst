@@ -4,7 +4,7 @@ Usage
 Installation
 ------------
 
-* ``pip install dynamicforms``
+* ``pip install django-dynamicforms``
 * Add ``dynamicforms`` to your ``INSTALLED_APPS``
 * Enable the Django admin for your project
 
