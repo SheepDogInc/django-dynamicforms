@@ -1,16 +1,16 @@
 import itertools
+from re import compile
 from datetime import datetime
 
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.db import models
-from django.template.defaultfilters import slugify
 from django import forms
 from django.contrib.contenttypes import generic
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 
-from utils import get_class, get_class_slug
+from utils import get_class
 
 
 class QuestionTypeRegisterError(Exception):
@@ -105,13 +105,18 @@ class DynamicFormQuestion(InheritanceResolveModel):
     def display(self, user):
         raise NotImplementedError("I don't know how to display myself.")
 
+    @classmethod
+    def save_response(cls, user, question_id, response, response_set):
+        raise NotImplementedError("My name is %s and I don't know how to save a response."
+                % cls)
+
     def get_type(self):
         return str(self._get_real_type())
 
     def get_form_name(self):
         """
         """
-        return '%s-%d' % (slugify(self.get_type()), self.id,)
+        return '%s-%d' % (self._meta.module_name, self.id,)
 
 
 class DynamicTextQuestion(DynamicFormQuestion):
@@ -124,6 +129,16 @@ class DynamicTextQuestion(DynamicFormQuestion):
         f = forms.CharField(label=self.question_text, widget=forms.Textarea)
         return f, self.get_form_name()
 
+    @classmethod
+    def save_response(cls, user, question_id, response, response_set):
+        q = cls.objects.get(pk=question_id)
+        DynamicTextResponse.objects.create(
+            user=user,
+            question=q,
+            dynamic_response_set=response_set,
+            text_response=response
+        )
+
 
 class DynamicMultipleChoiceAnswer(models.Model):
     question = models.ForeignKey('DynamicMultipleChoiceQuestion')
@@ -133,6 +148,7 @@ class DynamicMultipleChoiceAnswer(models.Model):
 class DynamicMultipleChoiceQuestion(DynamicFormQuestion):
 
     choice_class = DynamicMultipleChoiceAnswer
+    PATTERN = compile(r'^([a-z-]+)-([0-9]+)$')
 
     @classmethod
     def pretty_name(cls):
@@ -148,6 +164,19 @@ class DynamicMultipleChoiceQuestion(DynamicFormQuestion):
                 widget=forms.widgets.CheckboxSelectMultiple(),
                 choices=self.get_choices())
         return f, self.get_form_name()
+
+    @classmethod
+    def save_response(cls, user, question_id, responses, response_set):
+        q = cls.objects.get(pk=question_id)
+        if responses:
+            for r in responses:
+                meta = cls.PATTERN.findall(r)[0]
+                answer = DynamicMultipleChoiceAnswer.objects.get(id=meta[1])
+                models.DynamicMultipleChoiceResponse.objects.create(
+                        user=user,
+                        question=q,
+                        dynamic_response_set=response_set,
+                        answer=answer)
 
 
 class DynamicYesNoQuestion(DynamicMultipleChoiceQuestion):
@@ -165,6 +194,17 @@ class DynamicYesNoQuestion(DynamicMultipleChoiceQuestion):
                 widget=forms.widgets.RadioSelect(),
                 choices=choices)
         return f, self.get_form_name()
+
+    @classmethod
+    def save_response(cls, user, question_id, response, response_set):
+        q = cls.objects.get(pk=question_id)
+        DynamicYesNoResponse.objects.create(
+            user=user,
+            question=q,
+            response=True if response == 'yes' else False,
+            dynamic_response_set=response_set
+        )
+
 
 
 class DynamicRatingQuestion(DynamicMultipleChoiceQuestion):
@@ -286,7 +326,7 @@ def register_questions_types(*tuples):
             continue
         question_types.append({
             'pretty_name': class_.pretty_name(),
-            'slug': get_class_slug(t),
+            'slug': class_._meta.module_name,
             'class': class_
         })
     return question_types

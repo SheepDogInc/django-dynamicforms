@@ -1,10 +1,10 @@
 from django import forms
-from dynamicforms.models import DynamicFormQuestion
+from dynamicforms.models import DynamicTextQuestion, DynamicResponse
 from django.db import models
 
 # Create your models here.
 
-class TextareaQuestion(DynamicFormQuestion):
+class TextareaQuestion(DynamicTextQuestion):
 
     @classmethod
     def pretty_name(cls):
@@ -13,3 +13,8 @@ class TextareaQuestion(DynamicFormQuestion):
     def display(self, user):
         f = forms.CharField(label=self.question_text, widget=forms.Textarea)
         return f, self.get_form_name()
+
+
+class TextareaQuestion(DynamicResponse):
+    text_response = models.TextField()
+    question = models.ForeignKey(TextareaQuestion)

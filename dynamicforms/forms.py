@@ -5,6 +5,12 @@ from django.shortcuts import get_object_or_404
 import models
 
 
+TYPES_HASH = {}
+
+for t in models.QUESTION_TYPES:
+    TYPES_HASH[t['slug']] = t
+
+
 class DynamicFormShell(forms.Form):
     """
     Used to display front-facing content
@@ -127,58 +133,12 @@ class DynamicFormCreator(object):
         Insert the response to the database. This method ensures that no
         prorperly validated responses get thrown away.
         """
-        type = meta[0]
-        id = meta[1]
-        if type == 'dynamic-text-question':
-            self._save_text_response(type, id, response)
-        elif type == 'dynamic-multiple-choice-question':
-            self._save_multiple_choice_question(type, id, response)
-        elif type == 'dynamic-yes-no-question':
-            self._save_yesno_response(type, id, response)
-        elif type == 'dynamic-rating-question':
-            self._save_rating_response(type, id, response)
-        else:
-            raise NotImplementedError(
-                    "I don't know how to save this question type.")
+        question_type = meta[0]
+        question_id = meta[1]
 
-    def _save_text_response(self, type, id, response):
-        q = models.DynamicTextQuestion.objects.get(id=id)
-        models.DynamicTextResponse.objects.create(
-            user=self.user,
-            question=q,
-            dynamic_response_set=self.response_set,
-            text_response=response)
+        try:
+            class_ = TYPES_HASH[question_type]['class']
+        except KeyError:
+            raise Exception("Can't find the '%s' type." % question_type)
 
-    def _save_multiple_choice_question(self, type, id, responses):
-        q = models.DynamicMultipleChoiceQuestion.objects.get(id=id)
-        if responses:
-            for r in responses:
-                meta = self.PATTERN.findall(r)[0]
-                answer = \
-                    models.DynamicMultipleChoiceAnswer.objects.get(id=meta[1])
-                models.DynamicMultipleChoiceResponse.objects.create(
-                        user=self.user,
-                        question=q,
-                        dynamic_response_set=self.response_set,
-                        answer=answer)
-
-    def _save_yesno_response(self, type, id, response):
-        q = models.DynamicYesNoQuestion.objects.get(id=id)
-        if response == 'yes':
-            v = True
-        else:
-            v = False
-        models.DynamicYesNoResponse.objects.create(user=self.user,
-                question=q,
-                dynamic_response_set=self.response_set,
-                response=v)
-
-    def _save_rating_response(self, type, id, response):
-        q = models.DynamicRatingQuestion.objects.get(id=id)
-        meta = self.PATTERN.findall(response)[0]
-        answer = models.DynamicRatingAnswer.objects.get(id=meta[1])
-        models.DynamicRatingResponse.objects.create(
-                user=self.user,
-                question=q,
-                dynamic_response_set=self.response_set,
-                response=answer)
+        class_.save_response(self.user, question_id, response, self.response_set)
