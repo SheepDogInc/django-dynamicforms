@@ -1,18 +1,22 @@
-from django.conf import settings
 from django.conf.urls.defaults import *
 from django.contrib import admin
 from django.contrib.admin.util import unquote
-from django.contrib.contenttypes import generic
-from django.contrib.contenttypes.generic import BaseGenericInlineFormSet
-from django.contrib.contenttypes.models import ContentType
-from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect
 from django.utils.translation import ugettext_lazy as _
 import django.forms
 import django.db.models
 import models
 import views
-import forms
+
+
+class ContentCreationForm(django.forms.Form):
+    """
+    Provides a selector for which type of content to include in a Folder.
+    Filters over models in SURVEY_CONTENT_CHOICE_LIST and uses the display
+    format defined therein.
+    """
+    choices = models.CHOICES
+    new_content_type = django.forms.ChoiceField(choices=choices)
 
 
 class DynamicFormAdminForm(django.forms.ModelForm):
@@ -75,7 +79,7 @@ class DynamicFormAdmin(admin.ModelAdmin):
             self.message_user(request, _("Successfully deleted %d %s.") %
                     (n, ngettext("item", "items", n)))
             return HttpResponseRedirect("")
-        context = {'add_content_form': forms.ContentCreationForm(),
+        context = {'add_content_form': ContentCreationForm(),
                    'contents': children}
         context.update(extra_context or {})
         return super(DynamicFormAdmin, self).change_view(request, object_id,
@@ -112,39 +116,6 @@ class DynamicFormQuestionAdmin(admin.ModelAdmin):
     def changelist_view(self, request, *args, **kwds):
         return views.redirect_to_last_dynamicform(request)
 
-
-class DynamicTextQuestionAdmin(DynamicFormQuestionAdmin):
-    model = models.DynamicTextQuestion
-admin.site.register(models.DynamicTextQuestion, DynamicTextQuestionAdmin)
-
-
-class DynamicYesNoQuestionAdmin(DynamicFormQuestionAdmin):
-    model = models.DynamicYesNoQuestion
-admin.site.register(models.DynamicYesNoQuestion, DynamicYesNoQuestionAdmin)
-
-
-class MultipleChoiceInline(admin.StackedInline):
-    model = models.DynamicMultipleChoiceAnswer
-
-
-class DynamicMultipleChoiceQuestionAdmin(DynamicFormQuestionAdmin):
-    model = models.DynamicMultipleChoiceQuestion
-    inlines = [MultipleChoiceInline]
-
-admin.site.register(models.DynamicMultipleChoiceQuestion,
-        DynamicMultipleChoiceQuestionAdmin)
-
-
-class RatingChoiceInline(admin.StackedInline):
-    model = models.DynamicRatingAnswer
-
-
-class DynamicRatingQuestionAdmin(DynamicFormQuestionAdmin):
-    model = models.DynamicRatingQuestion
-    inlines = [RatingChoiceInline]
-
-
-admin.site.register(models.DynamicRatingQuestion, DynamicRatingQuestionAdmin)
 
 ###############################################################################
 # Responses

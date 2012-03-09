@@ -5,25 +5,6 @@ from django.shortcuts import get_object_or_404
 import models
 
 
-def _get_creation_choices():
-    # TODO:  Use url reversal rather than hard-wiring URL
-    choices = [('', '------')]
-    for model, display in models.QUESTION_TYPES:
-        c = ('/admin/dynamicforms/%s/add/' % model, display)
-        choices.append(c)
-    return choices
-
-
-class ContentCreationForm(forms.Form):
-    """
-    Provides a selector for which type of content to include in a Folder.
-    Filters over models in SURVEY_CONTENT_CHOICE_LIST and uses the display
-    format defined therein.
-    """
-    choices = _get_creation_choices()
-    new_content_type = forms.ChoiceField(choices=choices)
-
-
 class DynamicFormShell(forms.Form):
     """
     Used to display front-facing content

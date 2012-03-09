@@ -25,3 +25,9 @@ def get_mod_func(callback):
     except ValueError:
         return callback, ''
     return callback[:dot], callback[dot + 1:]
+
+
+def get_class_slug(path):
+    parts = path.split('.')
+    return parts[len(parts) - 1].lower()
+

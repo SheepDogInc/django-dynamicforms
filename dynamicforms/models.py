@@ -1,18 +1,35 @@
+import itertools
 from datetime import datetime
+
+from django.contrib import admin
 from django.contrib.auth.models import User
 from django.db import models
 from django.template.defaultfilters import slugify
 from django import forms
 from django.contrib.contenttypes import generic
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+
+from utils import get_class, get_class_slug
 
 
-QUESTION_TYPES = [
-    ('dynamictextquestion', 'Text question',),
-    ('dynamicyesnoquestion', 'Yes/No question',),
-    ('dynamicmultiplechoicequestion', 'Multiple choice question',),
-    ('dynamicratingquestion', 'Rating question',),
-]
+class QuestionTypeRegisterError(Exception):
+    """
+    Raised when a question type set in ``DYNAMICFORMS_CUSTOM_TYPES`` can't be
+    registered.
+    """
+    pass
+
+
+DYNAMICFORMS_CUSTOM_TYPES = getattr(settings, 'DYNAMICFORMS_CUSTOM_TYPES', {})
+
+
+DEFAULT_QUESTION_TYPES = (
+    'dynamicforms.models.DynamicTextQuestion',
+    'dynamicforms.models.DynamicYesNoQuestion',
+    'dynamicforms.models.DynamicMultipleChoiceQuestion',
+    'dynamicforms.models.DynamicRatingQuestion',
+)
 
 
 class InheritanceResolveModel(models.Model):
@@ -80,7 +97,8 @@ class DynamicFormQuestion(InheritanceResolveModel):
     def admin_url(self):
         return '/admin/dynamicforms/%s/%d/' % (self.real_type.model, self.id)
 
-    def pretty_name(self):
+    @classmethod
+    def pretty_name(cls):
         raise NotImplementedError(
                 "You should resolve me first before you ask me my name")
 
@@ -98,7 +116,8 @@ class DynamicFormQuestion(InheritanceResolveModel):
 
 class DynamicTextQuestion(DynamicFormQuestion):
 
-    def pretty_name(self):
+    @classmethod
+    def pretty_name(cls):
         return "Text question"
 
     def display(self, user):
@@ -106,9 +125,17 @@ class DynamicTextQuestion(DynamicFormQuestion):
         return f, self.get_form_name()
 
 
+class DynamicMultipleChoiceAnswer(models.Model):
+    question = models.ForeignKey('DynamicMultipleChoiceQuestion')
+    answer_text = models.TextField()
+
+
 class DynamicMultipleChoiceQuestion(DynamicFormQuestion):
 
-    def pretty_name(self):
+    choice_class = DynamicMultipleChoiceAnswer
+
+    @classmethod
+    def pretty_name(cls):
         return "Multiple choice question"
 
     def get_choices(self):
@@ -125,7 +152,8 @@ class DynamicMultipleChoiceQuestion(DynamicFormQuestion):
 
 class DynamicYesNoQuestion(DynamicMultipleChoiceQuestion):
 
-    def pretty_name(self):
+    @classmethod
+    def pretty_name(cls):
         return "Yes/No question"
 
     def display(self, user):
@@ -141,7 +169,8 @@ class DynamicYesNoQuestion(DynamicMultipleChoiceQuestion):
 
 class DynamicRatingQuestion(DynamicMultipleChoiceQuestion):
     
-    def pretty_name(self):
+    @classmethod
+    def pretty_name(cls):
         return "Rating question"
 
     def get_choices(self):
@@ -156,9 +185,6 @@ class DynamicRatingQuestion(DynamicMultipleChoiceQuestion):
         return f, self.get_form_name()
 
 
-class DynamicMultipleChoiceAnswer(models.Model):
-    question = models.ForeignKey(DynamicMultipleChoiceQuestion)
-    answer_text = models.TextField()
 
 
 class DynamicRatingAnswer(models.Model):
@@ -234,3 +260,75 @@ class DynamicRatingResponse(DynamicResponse):
 
     def __unicode__(self):
         return self.response.answer_text
+
+
+##############################################################################
+# Magic follows
+##############################################################################
+
+
+def register_questions_types(*tuples):
+    """
+    Take a list of tuples and return a list of ``dicts``.  Each ``dict``
+    contains the following keys:
+
+        * ``pretty_name`` - Human-readable name of question type
+        * ``slug``        - Url-safe name of question type
+        * ``class``       - class definition
+    """
+    types = list(itertools.chain(*tuples))
+    question_types = []
+    for t in types:
+        try:
+            class_ = get_class(t, QuestionTypeRegisterError)
+        except QuestionTypeRegisterError:
+            print 'Failed to register %s' % t
+            continue
+        question_types.append({
+            'pretty_name': class_.pretty_name(),
+            'slug': get_class_slug(t),
+            'class': class_
+        })
+    return question_types
+
+
+QUESTION_TYPES = register_questions_types(DEFAULT_QUESTION_TYPES,
+        DYNAMICFORMS_CUSTOM_TYPES)
+
+
+def _get_creation_choices():
+    """
+    Get choices for the *Add content* drop down in the admin.
+    """
+    # TODO:  Use url reversal rather than hard-wiring URL
+    choices = [('', '------')]
+    for question_type in QUESTION_TYPES:
+        app_label = question_type['class']._meta.app_label
+        c = ('/admin/%s/%s/add/' % (app_label, question_type['slug']),
+                question_type['pretty_name'])
+        choices.append(c)
+    return choices
+
+
+CHOICES = _get_creation_choices()
+from admin import DynamicFormQuestionAdmin
+
+
+def register_admin():
+    """
+    Register question types in Django admin
+    """
+    for t in QUESTION_TYPES:
+        class_ = t['class']
+        class admin_class(DynamicFormQuestionAdmin):
+            model = class_
+
+        if hasattr(class_, 'choice_class'):
+            inline_class = admin.StackedInline
+            inline_class.model = class_.choice_class
+            admin_class.inlines = [inline_class]
+
+        admin.site.register(class_, admin_class)
+
+
+register_admin()

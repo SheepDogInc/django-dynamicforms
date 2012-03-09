@@ -142,3 +142,7 @@ LOGGING = {
         },
     }
 }
+DYNAMICFORMS_CUSTOM_TYPES = (
+    'survey.models.TextareaQuestion',
+    # 'project.app.models.TextareaQuestion',
+)
